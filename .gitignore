@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Environment files (NEVER commit these!)
+.env
+.env.local
+.env.*.local
+
+# Google Apps Script
+.clasp.json
+# Note: .clasp.json contains scriptId which could be sensitive
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Backup files
+*.bak
+*.backup
+
+# Secret configuration files
+config.secret.js
+secrets.json
+
+# Any file ending in .secret.*
+*.secret.*

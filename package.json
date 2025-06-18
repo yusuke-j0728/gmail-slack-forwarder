@@ -1,0 +1,26 @@
+{
+  "name": "gmail-slack-forwarder",
+  "version": "1.0.0",
+  "description": "Gmail to Slack forwarder with attachment support using Google Apps Script",
+  "scripts": {
+    "login": "clasp login",
+    "push": "clasp push",
+    "pull": "clasp pull",
+    "logs": "clasp tail-logs",
+    "open": "clasp open-script",
+    "setup": "clasp create --type standalone --title 'Gmail Slack Forwarder'"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2",
+    "@types/google-apps-script": "^1.0.83"
+  },
+  "keywords": [
+    "gmail",
+    "slack",
+    "google-apps-script",
+    "automation",
+    "email-forwarding"
+  ],
+  "author": "",
+  "license": "MIT"
+}
