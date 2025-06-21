@@ -84,13 +84,13 @@ function processAttachments(attachments, subject, emailDate = new Date()) {
  */
 function createEmailFolder(baseFolder, subject, emailDate) {
   try {
-    // Format date as YYYY-MM-DD
-    const dateStr = Utilities.formatDate(emailDate, 'JST', 'yyyy-MM-dd');
+    // Format date as YYYYMMDD
+    const dateStr = Utilities.formatDate(emailDate, 'JST', 'yyyyMMdd');
     
     // Clean subject for folder name
     const cleanSubject = cleanSubjectForFolder(subject);
     
-    // Create folder name: "YYYY-MM-DD_Subject"
+    // Create folder name: "YYYYMMDD_Subject"
     const folderName = `${dateStr}_${cleanSubject}`;
     
     console.log(`Creating email folder: ${folderName}`);

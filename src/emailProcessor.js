@@ -45,24 +45,15 @@ function processMessage(message) {
     if (attachments.length > 0) {
       console.log(`Processing ${attachments.length} attachments...`);
       
-      // Check if there are any PDF files before processing
-      const pdfAttachments = attachments.filter(attachment => {
-        const fileName = attachment.getName().toLowerCase();
-        return fileName.endsWith('.pdf');
-      });
-      
-      if (pdfAttachments.length > 0) {
-        console.log(`Found ${pdfAttachments.length} PDF files, processing attachments...`);
-        try {
-          // Pass email date for organized folder structure
-          attachmentInfo.push(...processAttachments(attachments, subject, date));
-        } catch (error) {
-          console.error('Error processing attachments:', error);
-          // Continue with notification even if attachment processing fails
-        }
-      } else {
-        console.log('No PDF files found in attachments, skipping Drive folder creation');
-        // Still add attachment info for non-PDF files (for Slack notification)
+      // Process all attachments (not just PDFs)
+      console.log(`Processing all ${attachments.length} attachments...`);
+      try {
+        // Pass email date for organized folder structure
+        attachmentInfo.push(...processAttachments(attachments, subject, date));
+      } catch (error) {
+        console.error('Error processing attachments:', error);
+        // Continue with notification even if attachment processing fails
+        // Still add attachment info for notification
         attachments.forEach(attachment => {
           attachmentInfo.push({
             originalName: attachment.getName(),
@@ -71,7 +62,7 @@ function processMessage(message) {
             driveUrl: null,
             fileId: null,
             folderPath: null,
-            skipped: 'Not a PDF file'
+            error: 'Processing failed'
           });
         });
       }
