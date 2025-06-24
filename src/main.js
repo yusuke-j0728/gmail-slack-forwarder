@@ -130,8 +130,8 @@ function processEmails() {
               processedCount++;
               threadHasNewMessages = true;
               
-              // Mark this specific message as processed
-              markMessageAsProcessed(message);
+              // Mark this specific message as processed in spreadsheet
+              markMessageProcessedInSheet(message);
             }
             
           } catch (msgError) {
@@ -269,17 +269,13 @@ function getOrCreateDriveFolder() {
  * カスタムラベルシステムを使用して個別メッセージを処理済みとしてマーク
  * 
  * @param {GmailMessage} message - Gmail message to mark as processed
+ * @deprecated Use markMessageProcessedInSheet from spreadsheetManager.js instead
  */
 function markMessageAsProcessed(message) {
   try {
-    // Store processed message IDs in Script Properties
-    // 処理済みメッセージIDをScript Propertiesに保存
-    const messageId = message.getId();
-    const processedKey = `PROCESSED_MSG_${messageId}`;
-    const timestamp = new Date().getTime();
-    
-    setProperty(processedKey, timestamp.toString());
-    console.log(`Marked message as processed: ${messageId}`);
+    // Now using spreadsheet for tracking
+    console.log('Warning: markMessageAsProcessed is deprecated. Use markMessageProcessedInSheet instead.');
+    markMessageProcessedInSheet(message);
     
   } catch (error) {
     console.error('Error marking message as processed:', error);
@@ -292,28 +288,13 @@ function markMessageAsProcessed(message) {
  * 古い処理済みメッセージレコードのクリーンアップ（オプションのメンテナンス）
  * 
  * @param {number} daysOld - Remove records older than this many days
+ * @deprecated Cleanup is now handled automatically by spreadsheetManager.js
  */
 function cleanupOldProcessedMessages(daysOld = 30) {
   try {
-    console.log(`Cleaning up processed message records older than ${daysOld} days...`);
-    
-    const cutoffTime = new Date().getTime() - (daysOld * 24 * 60 * 60 * 1000);
-    const properties = PropertiesService.getScriptProperties().getProperties();
-    
-    let cleanedCount = 0;
-    
-    for (const [key, value] of Object.entries(properties)) {
-      if (key.startsWith('PROCESSED_MSG_')) {
-        const timestamp = parseInt(value);
-        if (timestamp < cutoffTime) {
-          PropertiesService.getScriptProperties().deleteProperty(key);
-          cleanedCount++;
-        }
-      }
-    }
-    
-    console.log(`Cleaned up ${cleanedCount} old processed message records`);
-    return cleanedCount;
+    console.log('Note: Cleanup is now handled automatically by the spreadsheet manager.');
+    // The spreadsheet manager handles cleanup automatically when row limit is exceeded
+    return 0;
     
   } catch (error) {
     console.error('Error cleaning up old processed messages:', error);
@@ -381,15 +362,31 @@ function showConfiguration() {
     const slackChannel = getProperty('SLACK_CHANNEL', false);
     const webhookUrl = getProperty('SLACK_WEBHOOK_URL', false);
     const folderId = getProperty('DRIVE_FOLDER_ID', false);
+    const spreadsheetId = getProperty('TRACKING_SPREADSHEET_ID', false);
     
     console.log(`Sender Email: ${senderEmail || 'NOT SET'}`);
     console.log(`Slack Channel: ${slackChannel || 'NOT SET'}`);
     console.log(`Webhook URL: ${webhookUrl ? '[SET]' : 'NOT SET'}`);
     console.log(`Drive Folder ID: ${folderId || 'NOT SET'}`);
+    console.log(`Tracking Spreadsheet ID: ${spreadsheetId || 'NOT SET'}`);
     
     console.log(`\nPattern Settings:`);
     console.log(`Multiple patterns enabled: ${CONFIG.SUBJECT_PATTERNS?.ENABLE_MULTIPLE_PATTERNS}`);
     console.log(`Total patterns: ${CONFIG.SUBJECT_PATTERNS?.PATTERNS?.length || 0}`);
+    
+    // Show tracking stats if spreadsheet exists
+    if (spreadsheetId) {
+      try {
+        const stats = getTrackingStats();
+        if (stats) {
+          console.log(`\nTracking Statistics:`);
+          console.log(`Tracked messages: ${stats.messageCount}`);
+          console.log(`Spreadsheet URL: ${stats.spreadsheetUrl}`);
+        }
+      } catch (error) {
+        // Ignore errors in stats
+      }
+    }
     
   } catch (error) {
     console.error('Error showing configuration:', error);
@@ -407,6 +404,58 @@ function testProcessEmails() {
     console.log('Test completed successfully');
   } catch (error) {
     console.error('Test failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Setup spreadsheet tracking system and migrate existing data
+ * スプレッドシートトラッキングシステムの設定と既存データの移行
+ */
+function setupSpreadsheetTracking() {
+  console.log('=== Setting up Spreadsheet Tracking System ===');
+  
+  try {
+    // Step 1: Create or get the tracking spreadsheet
+    console.log('Step 1: Creating/accessing tracking spreadsheet...');
+    const spreadsheet = getOrCreateTrackingSpreadsheet();
+    console.log(`✓ Spreadsheet ready: ${spreadsheet.getName()}`);
+    console.log(`  URL: ${spreadsheet.getUrl()}`);
+    
+    // Step 2: Check for existing PROCESSED_MSG entries in Script Properties
+    console.log('\nStep 2: Checking for existing processed messages in Script Properties...');
+    const properties = PropertiesService.getScriptProperties().getProperties();
+    const processedMessageCount = Object.keys(properties).filter(key => key.startsWith('PROCESSED_MSG_')).length;
+    console.log(`Found ${processedMessageCount} processed messages in Script Properties`);
+    
+    // Step 3: Migrate if needed
+    if (processedMessageCount > 0) {
+      console.log('\nStep 3: Migrating existing data to spreadsheet...');
+      migrateProcessedMessagesToSheet();
+      
+      // Optional: Ask user if they want to clean up Script Properties
+      console.log('\n⚠️  Migration complete!');
+      console.log('To free up Script Properties space, run: cleanupProcessedMessagesFromProperties()');
+      console.log('This will remove all PROCESSED_MSG entries from Script Properties.');
+    } else {
+      console.log('\nNo migration needed - no existing processed messages found.');
+    }
+    
+    // Step 4: Show final statistics
+    console.log('\nStep 4: Final setup statistics:');
+    const stats = getTrackingStats();
+    if (stats) {
+      console.log(`Total tracked messages: ${stats.messageCount}`);
+      console.log(`Row limit: ${stats.rowLimit}`);
+      console.log(`Oldest entry: ${stats.oldestDate || 'N/A'}`);
+      console.log(`Newest entry: ${stats.newestDate || 'N/A'}`);
+    }
+    
+    console.log('\n✅ Spreadsheet tracking system setup complete!');
+    console.log('The system will now use the spreadsheet for tracking processed messages.');
+    
+  } catch (error) {
+    console.error('Setup failed:', error);
     throw error;
   }
 }

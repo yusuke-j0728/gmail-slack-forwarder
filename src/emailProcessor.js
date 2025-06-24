@@ -161,15 +161,15 @@ function formatEmailBody(body) {
  */
 function isMessageAlreadyProcessed(message) {
   try {
-    // Check if this specific message ID was already processed
-    // この特定のメッセージIDが既に処理済みかどうかをチェック
+    // Check if this specific message ID was already processed in spreadsheet
+    // この特定のメッセージIDがスプレッドシートで既に処理済みかどうかをチェック
     const messageId = message.getId();
-    const processedKey = `PROCESSED_MSG_${messageId}`;
     
-    const processedTimestamp = getProperty(processedKey);
+    // Use spreadsheet-based tracking
+    const isProcessed = isMessageProcessedInSheet(messageId);
     
-    if (processedTimestamp) {
-      console.log(`Message ${messageId} was processed at ${new Date(parseInt(processedTimestamp))}`);
+    if (isProcessed) {
+      console.log(`Message ${messageId} was already processed (found in spreadsheet)`);
       return true;
     }
     

@@ -14,6 +14,7 @@ A Google Apps Script-based system that automatically forwards Gmail messages fro
 - 🔄 **Message-Level Duplicate Prevention**: Handles same-subject emails without skipping new messages
 - 📊 **Comprehensive Logging**: Detailed processing statistics and Drive folder URLs
 - ⚡ **Selective Processing**: Only creates Drive folders when PDF files are detected
+- 📋 **Spreadsheet-Based Tracking**: Scalable message tracking using Google Sheets (no Script Properties limitations)
 
 ## Quick Start
 
@@ -226,15 +227,19 @@ setRequiredConfiguration();  // From: src/main.js - Skip if you used Manual Setu
 showConfiguration();  // From: src/main.js
 // Expected: Shows your actual email and channel, [SET] for webhook
 
-// 3. Test that all properties are accessible
+// 3. NEW: Setup spreadsheet tracking system
+setupSpreadsheetTracking();  // From: src/main.js
+// Expected: Creates tracking spreadsheet, migrates existing data if any
+
+// 4. Test that all properties are accessible
 testConfiguration();  // From: src/testRunner.js
 // Expected: All validation checks pass
 
-// 4. Test the complete system
+// 5. Test the complete system
 runAllTests();  // From: src/testRunner.js
 // Expected: 100% success rate on all tests
 
-// 5. Enable automatic email monitoring
+// 6. Enable automatic email monitoring
 setupInitialTrigger();  // From: src/triggerManager.js
 // Expected: Trigger created, Slack notification of activation
 ```
@@ -274,12 +279,26 @@ SEND_DRIVE_FOLDER_NOTIFICATION: true,    // Send follow-up Drive folder links
 The system now tracks individual messages instead of email threads:
 - ✅ **Same subject, new emails**: Processed correctly
 - ✅ **Email thread replies**: Each message handled separately  
-- ✅ **Reliable tracking**: Uses message IDs stored in Script Properties
+- ✅ **Reliable tracking**: Uses message IDs stored in Google Sheets
+- ✅ **Scalable storage**: No Script Properties limitations
+
+#### 🆕 Spreadsheet-Based Tracking
+The system uses Google Sheets for tracking processed messages:
+- **Automatic creation**: Spreadsheet created on first run
+- **Migration support**: Existing Script Properties data migrated automatically
+- **Self-maintaining**: Keeps last 10,000 messages, auto-deletes older entries
+- **Visible tracking**: View processed messages directly in Google Sheets
 
 #### Maintenance Functions
 ```javascript
-// Clean up old processed message records (optional)
-cleanupOldProcessedMessages(30); // Remove records older than 30 days
+// View tracking spreadsheet statistics
+getTrackingStats(); // From: src/spreadsheetManager.js
+
+// Migrate existing data from Script Properties (if needed)
+migrateProcessedMessagesToSheet(); // From: src/spreadsheetManager.js
+
+// Clean up Script Properties after migration (optional)
+cleanupProcessedMessagesFromProperties(); // From: src/spreadsheetManager.js
 ```
 
 ### Subject Pattern Customization
@@ -455,7 +474,7 @@ Improved Email Processing:
 ├── For each thread:
 │   ├── Check each message individually
 │   ├── Message ID already processed? ──┐
-│   │                                    ├── Yes → Skip this message
+│   │   (Check in Google Sheets)        ├── Yes → Skip this message
 │   │                                    └── No → Continue processing
 │   ├── Subject pattern match? ──┐
 │   │                             ├── Yes → Process message
@@ -465,7 +484,7 @@ Improved Email Processing:
 │   │                              └── No → Mark as "skipped"
 │   ├── Send main Slack notification
 │   ├── Send follow-up Drive folder notification (if PDFs saved)
-│   └── Mark message ID as processed
+│   └── Mark message ID as processed in spreadsheet
 └── Apply thread label (if any messages were processed)
 ```
 
@@ -521,6 +540,7 @@ gmail-slack-forwarder/
     ├── emailProcessor.js # Email processing logic
     ├── driveManager.js   # Drive attachment management
     ├── slackNotifier.js  # Slack notification functionality
+    ├── spreadsheetManager.js # Spreadsheet-based message tracking
     ├── triggerManager.js # Trigger management
     └── testRunner.js     # Test suite
 ```
@@ -531,12 +551,12 @@ gmail-slack-forwarder/
 - `processEmails()`: Main processing entry point with message-level tracking
 - `validateConfiguration()`: Configuration validation
 - `getOrCreateDriveFolder()`: Drive folder management
-- 🆕 `markMessageAsProcessed()`: Store processed message IDs
-- 🆕 `cleanupOldProcessedMessages()`: Maintenance function for old records
+- 🆕 `setupSpreadsheetTracking()`: Initialize spreadsheet-based tracking system
+- `showConfiguration()`: Display current configuration including tracking stats
 
 #### `emailProcessor.js`
 - `processMessage()`: Individual email processing with duplicate prevention
-- 🆕 `isMessageAlreadyProcessed()`: Message-level duplicate checking
+- 🆕 `isMessageAlreadyProcessed()`: Message-level duplicate checking using spreadsheet
 - 🆕 `formatEmailBody()`: Smart email content formatting (up to 7500 chars)
 
 #### `driveManager.js`
@@ -555,11 +575,20 @@ gmail-slack-forwarder/
 - `createTrigger()`: Create periodic execution trigger
 - `checkTriggerHealth()`: Trigger health check
 
+#### 🆕 `spreadsheetManager.js`
+- `getOrCreateTrackingSpreadsheet()`: Create/access tracking spreadsheet
+- `isMessageProcessedInSheet()`: Check if message already processed
+- `markMessageProcessedInSheet()`: Record processed message
+- `migrateProcessedMessagesToSheet()`: Migrate from Script Properties
+- `getTrackingStats()`: Get spreadsheet statistics
+- `cleanupOldEntriesInSheet()`: Auto-cleanup old entries
+
 #### `testRunner.js`
 - `runAllTests()`: Comprehensive test suite
 - `testProcessEmails()`: Test actual email processing with PDFs
 - `testDriveOperations()`: Test Drive folder operations
 - `testSlackNotifications()`: Test both main and follow-up notifications
+- 🆕 `testSpreadsheetOperations()`: Test spreadsheet tracking
 
 ## Troubleshooting
 
@@ -604,12 +633,13 @@ npm run push
 
 #### 🔧 **Same-Subject Emails Not Processing**
 **Symptom**: New emails with same subject are skipped
-🆕 **SOLVED**: This issue has been fixed with message-level tracking!
+🆕 **SOLVED**: This issue has been fixed with spreadsheet-based message-level tracking!
 ```javascript
 // Verification: Check that message-level processing is working
 1. Run testProcessEmails() with same-subject emails
 2. Check logs for "Message already processed" vs "Processing new message"
-3. Verify Script Properties contain PROCESSED_MSG_ entries
+3. Open tracking spreadsheet to see processed messages
+4. Run getTrackingStats() to view statistics
 ```
 
 #### 🔧 **No Drive Folders Created**
@@ -635,20 +665,23 @@ npm run push
 1. **Log Check**: Use `npm run logs` to check latest execution logs
    - Look for "Checked: X messages, Processed: Y" statistics
    - Check for PDF detection: "Found X PDF files" or "No PDF files found"
-   - Verify message tracking: "Message already processed" vs "Processing new message"
+   - Verify message tracking: "Message already processed (found in spreadsheet)" vs "Processing new message"
 
 2. **Individual Tests**: Run test functions for each module
    - `testProcessEmails()`: Test with actual emails (recommended for PDF testing)
    - `testDriveOperations()`: Test folder creation and organization
    - `testSlackNotifications()`: Test both main and follow-up notifications
+   - 🆕 `testSpreadsheetOperations()`: Test spreadsheet tracking
 
 3. **Configuration Validation**: Use `testConfiguration()` to check basic settings
 
 4. **Message Tracking Check**:
    ```javascript
-   // Check processed message tracking
-   const properties = PropertiesService.getScriptProperties().getProperties();
-   Object.keys(properties).filter(key => key.startsWith('PROCESSED_MSG_')).length;
+   // Check tracking spreadsheet statistics
+   getTrackingStats(); // From: src/spreadsheetManager.js
+   
+   // View spreadsheet directly
+   showConfiguration(); // Shows spreadsheet URL
    ```
 
 5. **Drive Folder Verification**:
@@ -668,12 +701,14 @@ npm run push
 // Check execution statistics
 getDriveFolderStats()                    // File saving status
 getTriggerInfo()                         // Trigger operation status
-cleanupOldProcessedMessages(30)          // Maintenance: cleanup old records
+getTrackingStats()                       // Spreadsheet tracking statistics
 
-// Check message tracking
-const props = PropertiesService.getScriptProperties().getProperties();
-const processedCount = Object.keys(props).filter(k => k.startsWith('PROCESSED_MSG_')).length;
-console.log(`Currently tracking ${processedCount} processed messages`);
+// View tracking spreadsheet
+showConfiguration()                      // Shows spreadsheet URL and stats
+
+// Maintenance operations
+migrateProcessedMessagesToSheet()        // Migrate from Script Properties if needed
+cleanupProcessedMessagesFromProperties() // Clean Script Properties after migration
 ```
 
 **Expected Log Output**:
