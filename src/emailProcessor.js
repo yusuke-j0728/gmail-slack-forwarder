@@ -96,7 +96,7 @@ function processMessage(message) {
  * Slack表示用にメール本文を適切な長さでフォーマット
  * 
  * @param {string} body - Raw email body
- * @returns {string} - Formatted body for Slack
+ * @returns {string} - Formatted body for Slack (returns the full body now)
  */
 function formatEmailBody(body) {
   try {
@@ -123,28 +123,8 @@ function formatEmailBody(body) {
       return cleanBody.substring(0, cutPoint) + '...\n\n_[簡略表示モード]_';
     }
     
-    // Check if body exceeds Slack field limit (approximately 8000 characters)
-    if (cleanBody.length <= CONFIG.BODY_PREVIEW_LENGTH) {
-      return cleanBody;
-    }
-    
-    // If too long, truncate smartly
-    const truncated = cleanBody.substring(0, CONFIG.BODY_PREVIEW_LENGTH);
-    
-    // Try to end at a sentence boundary
-    const lastSentenceEnd = Math.max(
-      truncated.lastIndexOf('\u3002'),  // Japanese period
-      truncated.lastIndexOf('.'),   // English period
-      truncated.lastIndexOf('\n\n')  // Paragraph break
-    );
-    
-    if (lastSentenceEnd > CONFIG.BODY_PREVIEW_LENGTH * 0.8) {
-      // If we found a good break point near the end, use it
-      return truncated.substring(0, lastSentenceEnd + 1) + '\n\n_[以下略]_';
-    } else {
-      // Otherwise, just truncate and add indicator
-      return truncated + '...\n\n_[以下略]_';
-    }
+    // Return the full body - splitting will be handled in slackNotifier.js
+    return cleanBody;
     
   } catch (error) {
     console.error('Error formatting email body:', error);

@@ -6,6 +6,92 @@
  */
 
 /**
+ * Send email notification to Slack using Web API (with thread support)
+ * Slack Web APIを使用してメール通知を送信（スレッドサポート付き）
+ * 
+ * @param {Object} emailData - Email data object
+ * @returns {string|null} - Message timestamp for threading, or null if failed
+ */
+function sendSlackNotificationViaAPI(emailData) {
+  const startTime = new Date().getTime();
+  
+  try {
+    console.log('Preparing Slack notification via Web API...');
+    const botToken = getProperty(PROPERTY_KEYS.SLACK_BOT_TOKEN, false);
+    
+    if (!botToken) {
+      console.log('No bot token found, falling back to webhook method');
+      return null;
+    }
+    
+    const channel = CONFIG.SLACK_CHANNEL.replace('#', ''); // Remove # if present
+    
+    // Build attachment text
+    const attachmentText = buildAttachmentText(emailData.attachments);
+    
+    // Build message for API
+    const messageData = buildSlackMessage(emailData, attachmentText);
+    
+    // Convert to Web API format
+    const apiPayload = {
+      channel: channel,
+      text: messageData.attachments[0].title,
+      attachments: messageData.attachments,
+      unfurl_links: false,
+      unfurl_media: false
+    };
+    
+    // Send via Web API
+    const response = UrlFetchApp.fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json'
+      },
+      payload: JSON.stringify(apiPayload),
+      muteHttpExceptions: true
+    });
+    
+    const responseData = JSON.parse(response.getContentText());
+    const endTime = new Date().getTime();
+    const sendTime = endTime - startTime;
+    
+    if (responseData.ok) {
+      console.log(`✓ Slack notification sent successfully via API (${sendTime}ms)`);
+      console.log(`Message timestamp: ${responseData.ts}`);
+      
+      // Send additional messages for long email body if needed
+      if (emailData.body && emailData.body.length > 1000) {
+        console.log('Email body is long, sending additional messages in thread...');
+        sendLongEmailBodyInThread(emailData.subject, emailData.body, emailData.date, channel, responseData.ts);
+      }
+      
+      // Send follow-up message with Drive folder info if PDFs were saved
+      if (CONFIG.SEND_DRIVE_FOLDER_NOTIFICATION) {
+        const savedPdfAttachments = emailData.attachments.filter(att => 
+          !att.error && !att.skipped && att.folderUrl
+        );
+        
+        if (savedPdfAttachments.length > 0) {
+          console.log(`Sending follow-up message for ${savedPdfAttachments.length} saved PDFs in thread...`);
+          sendDriveFolderNotificationInThread(emailData.subject, savedPdfAttachments, emailData.date, channel, responseData.ts);
+        }
+      }
+      
+      return responseData.ts;
+      
+    } else {
+      console.error(`✗ Slack API notification failed: ${responseData.error}`);
+      return null;
+    }
+    
+  } catch (error) {
+    console.error('Error sending Slack notification via API:', error);
+    return null;
+  }
+}
+
+/**
  * Send email notification to Slack
  * メール通知をSlackに送信
  * 
@@ -20,9 +106,19 @@ function sendSlackNotification(emailData) {
   const startTime = new Date().getTime();
   
   try {
+    // Check if we should use Web API instead of webhook
+    const useAPI = getProperty(PROPERTY_KEYS.USE_SLACK_API, false) === 'true';
+    if (useAPI) {
+      const messageTs = sendSlackNotificationViaAPI(emailData);
+      if (messageTs) {
+        return; // Successfully sent via API
+      }
+      // Fall through to webhook method if API failed
+    }
     console.log('Preparing Slack notification...');
     console.log(`Subject: ${emailData.subject}`);
     console.log(`Attachments: ${emailData.attachments.length}`);
+    console.log(`Body length: ${emailData.body ? emailData.body.length : 0} characters`);
     
     const webhookUrl = getProperty(PROPERTY_KEYS.SLACK_WEBHOOK_URL);
     
@@ -51,6 +147,26 @@ function sendSlackNotification(emailData) {
     if (responseCode === 200) {
       console.log(`✓ Slack notification sent successfully (${sendTime}ms)`);
       
+      // Try to extract timestamp from response for threading
+      let messageTs = null;
+      try {
+        // Note: Webhook responses don't include ts, but we'll try anyway
+        const responseData = JSON.parse(responseText);
+        if (responseData.ts) {
+          messageTs = responseData.ts;
+          console.log(`Message timestamp: ${messageTs}`);
+        }
+      } catch (e) {
+        // Webhook doesn't return message details, this is expected
+        console.log('Note: Cannot get message timestamp from webhook response (this is normal)');
+      }
+      
+      // Send additional messages for long email body if needed
+      if (emailData.body && emailData.body.length > 1000) {
+        console.log('Email body is long, sending additional messages...');
+        sendLongEmailBody(emailData.subject, emailData.body, emailData.date);
+      }
+      
       // Send follow-up message with Drive folder info if PDFs were saved
       if (CONFIG.SEND_DRIVE_FOLDER_NOTIFICATION) {
         const savedPdfAttachments = emailData.attachments.filter(att => 
@@ -59,7 +175,7 @@ function sendSlackNotification(emailData) {
         
         if (savedPdfAttachments.length > 0) {
           console.log(`Sending follow-up message for ${savedPdfAttachments.length} saved PDFs...`);
-          sendDriveFolderNotification(emailData.subject, savedPdfAttachments);
+          sendDriveFolderNotification(emailData.subject, savedPdfAttachments, emailData.date);
         }
       }
       
@@ -123,6 +239,14 @@ function buildSlackMessage(emailData, attachmentText) {
     attachmentCountText += ` (${skippedAttachments}件スキップ)`;
   }
   
+  // For long emails, show only a brief preview in main message
+  let bodyPreview = emailData.body || '_本文なし_';
+  const isLongBody = bodyPreview.length > 1000; // Much more conservative limit
+  if (isLongBody) {
+    // Show only the first 500 characters as preview
+    bodyPreview = bodyPreview.substring(0, 500) + '\n\n_[本文の全文は続きのメッセージで表示されます]_';
+  }
+  
   return {
     channel: CONFIG.SLACK_CHANNEL,
     username: 'Gmail Bot',
@@ -143,8 +267,8 @@ function buildSlackMessage(emailData, attachmentText) {
           short: true
         },
         {
-          title: '📝 本文（抜粋）',
-          value: emailData.body || '_本文なし_',
+          title: '📝 本文',
+          value: bodyPreview,
           short: false
         },
         {
@@ -284,8 +408,9 @@ function sendErrorSummary(processedCount, errorCount, executionTime) {
  * 
  * @param {string} emailSubject - Email subject for reference
  * @param {Array} savedAttachments - Array of successfully saved attachment info
+ * @param {Date} emailDate - Email date for reference
  */
-function sendDriveFolderNotification(emailSubject, savedAttachments) {
+function sendDriveFolderNotification(emailSubject, savedAttachments, emailDate) {
   try {
     console.log('Sending Drive folder follow-up notification...');
     
@@ -311,16 +436,22 @@ function sendDriveFolderNotification(emailSubject, savedAttachments) {
     const fileCount = savedAttachments.length;
     const folderCount = uniqueFolders.length;
     
+    // Format reference to original message
+    const dateStr = emailDate ? Utilities.formatDate(emailDate, 'JST', 'HH:mm') : '';
+    const referenceText = dateStr ? `${dateStr}のメール` : '上記メール';
+    
     const message = {
       channel: CONFIG.SLACK_CHANNEL,
       username: 'Gmail Bot',
       icon_emoji: ':file_folder:',
-      text: `📁 **PDFファイル保存完了**\n\n` +
-            `件名: ${emailSubject}\n` +
-            `保存数: ${fileCount}件のPDFファイル\n` +
-            `フォルダ: ${folderCount}個\n\n` +
-            `**🔗 Google Driveフォルダ:**\n${folderLinks}\n\n` +
-            `_フォルダリンクをクリックしてPDFファイルにアクセスできます_`,
+      text: `↳ ${referenceText}の添付ファイルをGoogle Driveに保存しました`,
+      attachments: [{
+        color: '#4CAF50',  // Green for success
+        title: '📁 PDFファイル保存完了',
+        text: `${fileCount}件のPDFファイルを保存しました\n\n${folderLinks}`,
+        footer: `📧 ${emailSubject}`,
+        ts: Math.floor(Date.now() / 1000)
+      }],
       unfurl_links: false,
       unfurl_media: false
     };
@@ -405,6 +536,308 @@ function sendTestNotification() {
 }
 
 /**
+ * Send long email body as additional messages
+ * 長いメール本文を追加メッセージとして送信
+ * 
+ * @param {string} subject - Email subject for reference
+ * @param {string} fullBody - Full email body text
+ * @param {Date} emailDate - Email date for reference
+ */
+function sendLongEmailBody(subject, fullBody, emailDate) {
+  try {
+    console.log('Sending additional messages for long email body...');
+    console.log(`Total body length: ${fullBody.length} characters`);
+    
+    const webhookUrl = getProperty(PROPERTY_KEYS.SLACK_WEBHOOK_URL);
+    const chunkSize = 3500; // Safe size for Slack messages
+    
+    // Send the ENTIRE body text in chunks, starting from the beginning
+    let remainingBody = fullBody;
+    let partNumber = 1;
+    let totalSent = 0;
+    
+    console.log(`Processing full body in chunks...`);
+    
+    while (remainingBody.length > 0) {
+      const chunk = remainingBody.substring(0, Math.min(chunkSize, remainingBody.length));
+      remainingBody = remainingBody.substring(chunk.length);
+      
+      console.log(`Sending part ${partNumber}: ${chunk.length} characters`);
+      console.log(`Remaining after this part: ${remainingBody.length} characters`);
+      
+      const isLastPart = remainingBody.length === 0;
+      const partText = isLastPart ? `（最終パート）` : `（パート ${partNumber}）`;
+      
+      // Format the continuation message with clear reference to the original
+      const dateStr = emailDate ? Utilities.formatDate(emailDate, 'JST', 'HH:mm') : '';
+      const referenceText = dateStr ? `${dateStr}のメール` : '上記メール';
+      
+      const message = {
+        channel: CONFIG.SLACK_CHANNEL,
+        username: 'Gmail Bot',
+        icon_emoji: ':speech_balloon:',
+        text: partNumber === 1 
+          ? `↳ ${referenceText}の本文全文です` 
+          : '',
+        attachments: [{
+          color: '#E0E0E0',  // Gray color for continuation
+          title: `${partText}`,
+          text: chunk,
+          footer: `📧 ${subject}`,
+          ts: Math.floor(Date.now() / 1000)
+        }]
+      };
+      
+      // Add a delay between messages to avoid rate limiting
+      Utilities.sleep(1000);
+      
+      const response = UrlFetchApp.fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        payload: JSON.stringify(message),
+        muteHttpExceptions: true
+      });
+      
+      if (response.getResponseCode() !== 200) {
+        console.error(`Failed to send body part ${partNumber}: ${response.getResponseCode()}`);
+        console.error(`Response: ${response.getContentText()}`);
+        break;
+      }
+      
+      totalSent += chunk.length;
+      partNumber++;
+    }
+    
+    console.log(`✓ Sent ${partNumber - 1} additional message(s) for email body`);
+    console.log(`Total characters sent: ${totalSent} / ${fullBody.length}`);
+    
+    if (totalSent === fullBody.length) {
+      console.log('✅ All email content successfully sent to Slack');
+    } else {
+      console.warn(`⚠️ Some content may be missing: ${fullBody.length - totalSent} characters not sent`);
+    }
+    
+  } catch (error) {
+    console.error('Error sending long email body:', error);
+    // Don't throw - this is an enhancement feature
+  }
+}
+
+/**
+ * Send long email body in thread using Web API
+ * Web APIを使用してスレッドに長いメール本文を送信
+ * 
+ * @param {string} subject - Email subject for reference
+ * @param {string} fullBody - Full email body text
+ * @param {Date} emailDate - Email date for reference
+ * @param {string} channel - Slack channel
+ * @param {string} threadTs - Parent message timestamp
+ */
+function sendLongEmailBodyInThread(subject, fullBody, emailDate, channel, threadTs) {
+  try {
+    console.log('Sending email body in thread...');
+    const botToken = getProperty(PROPERTY_KEYS.SLACK_BOT_TOKEN, false);
+    
+    if (!botToken) {
+      console.log('No bot token, cannot send thread messages');
+      return;
+    }
+    
+    const chunkSize = 3500;
+    let remainingBody = fullBody;
+    let partNumber = 1;
+    
+    while (remainingBody.length > 0) {
+      const chunk = remainingBody.substring(0, Math.min(chunkSize, remainingBody.length));
+      remainingBody = remainingBody.substring(chunk.length);
+      
+      const isLastPart = remainingBody.length === 0;
+      const partText = isLastPart ? `（最終パート）` : `（パート ${partNumber}）`;
+      
+      const payload = {
+        channel: channel,
+        thread_ts: threadTs,
+        text: partNumber === 1 ? '📄 メール本文の全文' : '',
+        attachments: [{
+          color: '#E0E0E0',
+          title: partText,
+          text: chunk,
+          footer: `📧 ${subject}`,
+          ts: Math.floor(Date.now() / 1000)
+        }]
+      };
+      
+      const response = UrlFetchApp.fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${botToken}`,
+          'Content-Type': 'application/json'
+        },
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true
+      });
+      
+      const responseData = JSON.parse(response.getContentText());
+      if (!responseData.ok) {
+        console.error(`Failed to send thread message: ${responseData.error}`);
+        break;
+      }
+      
+      partNumber++;
+      Utilities.sleep(500); // Avoid rate limiting
+    }
+    
+    console.log(`✓ Sent ${partNumber - 1} thread message(s) for email body`);
+    
+  } catch (error) {
+    console.error('Error sending email body in thread:', error);
+  }
+}
+
+/**
+ * Send Drive folder notification in thread using Web API
+ * Web APIを使用してスレッドにDriveフォルダ通知を送信
+ * 
+ * @param {string} emailSubject - Email subject for reference
+ * @param {Array} savedAttachments - Array of successfully saved attachment info
+ * @param {Date} emailDate - Email date for reference
+ * @param {string} channel - Slack channel
+ * @param {string} threadTs - Parent message timestamp
+ */
+function sendDriveFolderNotificationInThread(emailSubject, savedAttachments, emailDate, channel, threadTs) {
+  try {
+    console.log('Sending Drive folder notification in thread...');
+    const botToken = getProperty(PROPERTY_KEYS.SLACK_BOT_TOKEN, false);
+    
+    if (!botToken) {
+      console.log('No bot token, cannot send thread messages');
+      return;
+    }
+    
+    const uniqueFolders = [...new Map(
+      savedAttachments
+        .filter(att => att.folderUrl && att.folderPath)
+        .map(att => [att.folderUrl, { url: att.folderUrl, path: att.folderPath }])
+    ).values()];
+    
+    const folderLinks = uniqueFolders.map(folder => 
+      `📁 <${folder.url}|${folder.path}>`
+    ).join('\n');
+    
+    const fileCount = savedAttachments.length;
+    
+    const payload = {
+      channel: channel,
+      thread_ts: threadTs,
+      text: '📁 PDFファイル保存完了',
+      attachments: [{
+        color: '#4CAF50',
+        text: `${fileCount}件のPDFファイルを保存しました\n\n${folderLinks}`,
+        footer: `📧 ${emailSubject}`,
+        ts: Math.floor(Date.now() / 1000)
+      }]
+    };
+    
+    const response = UrlFetchApp.fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json'
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+    
+    const responseData = JSON.parse(response.getContentText());
+    if (responseData.ok) {
+      console.log('✓ Drive folder notification sent in thread');
+    } else {
+      console.error(`Failed to send Drive notification: ${responseData.error}`);
+    }
+    
+  } catch (error) {
+    console.error('Error sending Drive notification in thread:', error);
+  }
+}
+
+/**
+ * Test long email body splitting
+ * 長いメール本文の分割をテスト
+ */
+function testLongEmailSplitting() {
+  console.log('=== TESTING Long Email Body Splitting ===');
+  
+  try {
+    // Create a test email with long body
+    const longBody = `テスト件名: サンプルメール
+
+こちらはテスト用のサンプルメールです。
+システムの動作確認のために使用されます。
+
+---------------------------------------------------
+　サンプル情報セクション
+---------------------------------------------------
+●サンプル企業A、新サービス「テストサービス」をリリース
+https://example.com/news/sample1
+●サンプル企業B、新機能「サンプル機能」の提供を開始
+https://example.com/news/sample2
+
+●サンプル企業C、テストプロジェクトに関するお知らせ
+https://example.com/news/sample3
+●サンプル企業D、新しい取り組みについて
+https://example.com/news/sample4
+
+●サンプル企業E、システム改善に関する発表
+https://example.com/news/sample5
+
+●サンプル企業F、テストサービスの提供開始
+https://example.com/news/sample6
+
+---------------------------------------------------
+　テスト情報セクション
+---------------------------------------------------
+●テスト機関における研究成果として新技術に関する研究報告書の公開
+https://example.com/research/test1
+
+●テスト庁、新制度に基づく情報提供について
+https://example.com/gov/test1
+
+●テスト機関、新基準の実施状況についての報告書の公表について
+https://example.com/reports/test1
+
+---------------------------------------------------
+　事務局からのお知らせ
+---------------------------------------------------
+●テストイベントの開催日時決定のお知らせ
+テストイベントの開催日時が決定しましたので、ご案内申し上げます。
+開催日時：2025年12月1日（月）14：00開始
+場所：テスト会場
+対象：テスト参加者
+主催：テスト運営事務局`;
+
+    console.log(`Test body length: ${longBody.length} characters`);
+    
+    // Test the splitting logic
+    const emailData = {
+      subject: 'テストメルマガ／サンプル企業からのお知らせ',
+      sender: 'test@example.com',
+      date: new Date(),
+      body: longBody,
+      attachments: []
+    };
+    
+    // Send the test notification
+    sendSlackNotification(emailData);
+    
+    console.log('✓ Long email splitting test completed');
+    
+  } catch (error) {
+    console.error('Long email splitting test failed:', error);
+    throw error;
+  }
+}
+
+/**
  * Test function for Slack operations
  * Slack操作のテスト関数
  */
@@ -453,21 +886,21 @@ function testSlackNotifications() {
       {
         originalName: 'document1.pdf',
         folderUrl: 'https://drive.google.com/drive/folders/test123',
-        folderPath: '2025-06-18_組織メルマガ',
+        folderPath: '2025-06-18_サンプルメルマガ',
         error: null,
         skipped: null
       },
       {
         originalName: 'document2.pdf', 
         folderUrl: 'https://drive.google.com/drive/folders/test123',
-        folderPath: '2025-06-18_組織メルマガ',
+        folderPath: '2025-06-18_サンプルメルマガ',
         error: null,
         skipped: null
       }
     ];
     
     console.log('✓ Testing Drive folder notification...');
-    sendDriveFolderNotification('組織からのお知らせメール', testDriveAttachments);
+    sendDriveFolderNotification('サンプル組織からのお知らせメール', testDriveAttachments);
     console.log('✓ Drive folder notification test sent');
     
     console.log('Slack notifications test completed successfully');

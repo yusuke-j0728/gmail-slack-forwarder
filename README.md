@@ -1,20 +1,61 @@
 # Gmail to Slack Forwarder
 
-A Google Apps Script-based system that automatically forwards Gmail messages from specific senders to Slack and saves attachments to Google Drive.
+A secure, production-ready Google Apps Script system that automatically forwards Gmail messages from specific senders to Slack and saves attachments to Google Drive.
+
+[![Security](https://img.shields.io/badge/Security-Production%20Ready-green)](https://github.com/your-username/gmail-slack-forwarder)
+[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+[![Google Apps Script](https://img.shields.io/badge/Platform-Google%20Apps%20Script-blue)](https://script.google.com)
 
 ## Features
 
-- 🔍 **Smart Monitoring**: Automated monitoring of emails from specific senders with message-level tracking
+### 🚀 Core Functionality
+- 🔍 **Smart Email Monitoring**: Automated monitoring of emails from specific senders with message-level tracking
 - 📧 **Advanced Pattern Matching**: Multiple regex patterns for complex email subjects and organizational formats
+- 🔄 **Message-Level Duplicate Prevention**: Handles same-subject emails without skipping new messages using spreadsheet tracking
+- ⏰ **Automated Scheduling**: Periodic checks every 5 minutes with robust error handling
+
+### 💬 Slack Integration
 - 🚨 **Rich Slack Notifications**: Instant notifications with full email content and attachment details
+- 🧵 **Thread Support**: Optional Slack Web API integration for organized thread-based conversations
+- 📎 **Follow-up Notifications**: Dedicated Drive folder links sent as separate Slack messages
+- 🎨 **Smart Formatting**: Color-coded notifications with comprehensive email previews
+
+### 📁 File Management
 - 📱 **Intelligent PDF Management**: Automatic PDF detection and organized Google Drive storage
 - 📁 **Smart Folder Organization**: Date + subject-based folder structure for easy file management
-- 📎 **Follow-up Notifications**: Dedicated Drive folder links sent as separate Slack messages
-- ⏰ **Automated Scheduling**: Periodic checks every 5 minutes with robust error handling
-- 🔄 **Message-Level Duplicate Prevention**: Handles same-subject emails without skipping new messages
-- 📊 **Comprehensive Logging**: Detailed processing statistics and Drive folder URLs
 - ⚡ **Selective Processing**: Only creates Drive folders when PDF files are detected
+- 🔗 **Direct Links**: Clickable file and folder URLs in Slack notifications
+
+### 🔧 System Management
 - 📋 **Spreadsheet-Based Tracking**: Scalable message tracking using Google Sheets (no Script Properties limitations)
+- 📊 **Comprehensive Logging**: Detailed processing statistics and Drive folder URLs
+- 🔒 **Security-First Design**: All sensitive data stored in Script Properties, safe for public repositories
+- 🛠️ **Easy Configuration**: Simple setup with comprehensive validation and testing tools
+
+## 🔒 Security & Privacy
+
+**This project is designed with security as a top priority:**
+- 🔐 **Zero Hardcoded Secrets**: All sensitive information (API keys, webhooks, emails) is stored in Google Apps Script Properties, never in code
+- 🌍 **Public Repository Safe**: The codebase contains no personal information and can be safely shared publicly
+- 🛡️ **Secure Configuration**: Helper functions prevent accidental exposure of sensitive data in logs
+- 📝 **Clean Examples**: All documentation uses generic placeholder values (example.com, company.com)
+- 🔍 **Security Validation**: Built-in configuration validation ensures proper setup without exposing secrets
+
+**Safe for:**
+- Open source contributions
+- Corporate environments
+- Team sharing and collaboration
+- Public GitHub repositories
+
+## 🆕 What's New
+
+**Latest Updates (Ready for Public GitHub):**
+- 🔒 **Security Enhanced**: All personal data removed, safe for public repositories
+- 📊 **Increased Email Coverage**: Body preview increased from 7,500 to 20,000 characters
+- 🧵 **Slack Threading**: Full Web API support for organized thread conversations
+- 📋 **Spreadsheet Tracking**: Scalable message tracking with Google Sheets
+- 🛠️ **Improved Setup**: Streamlined configuration with better validation
+- 📝 **Updated Documentation**: Comprehensive setup guide with security best practices
 
 ## Quick Start
 
@@ -26,8 +67,8 @@ A Google Apps Script-based system that automatically forwards Gmail messages fro
 
 ### 2. Local Development Setup
 ```bash
-# Clone and setup
-git clone <your-repo>
+# Clone the repository
+git clone https://github.com/your-username/gmail-slack-forwarder.git
 cd gmail-slack-forwarder
 
 # Install dependencies
@@ -53,10 +94,33 @@ npm run push
 ### 3. Configuration
 ⚠️ **SECURITY NOTICE**: All sensitive information is stored in Script Properties, NOT in code!
 
-#### 3.1 Slack Webhook Setup
+#### 3.1 Slack Setup
+
+You have two options for Slack integration:
+
+**Option A: Incoming Webhooks (Simple, No Thread Support)**
 1. Add Incoming Webhooks app to your Slack workspace
 2. Select notification channel and generate Webhook URL
 3. **Keep this URL secure** - it will be stored in Script Properties
+
+**Option B: Slack App with Web API (Advanced, Thread Support)**
+1. **Create a Slack App**:
+   - Go to https://api.slack.com/apps
+   - Click "Create New App" → "From scratch"
+   - Name your app (e.g., "Gmail Forwarder")
+   - Select your workspace
+
+2. **Configure OAuth & Permissions**:
+   - Go to "OAuth & Permissions" in the sidebar
+   - Add these Bot Token Scopes:
+     - `chat:write` - Send messages
+     - `chat:write.public` - Send messages to public channels
+   - Click "Install to Workspace"
+   - Copy the "Bot User OAuth Token" (starts with `xoxb-`)
+
+3. **Add Bot to Channel**:
+   - In Slack, go to the channel where you want notifications
+   - Type `/invite @YourBotName` to add the bot
 
 #### 3.2 Drive Folder Setup (Optional - Set Before Configuration)
 
@@ -110,9 +174,11 @@ You need to set exactly **3 required properties** (plus 1 optional) in Google Ap
 | Property Key | Description | Example Value | Required |
 |--------------|-------------|---------------|----------|
 | `SENDER_EMAIL` | Email address to monitor for incoming messages | `your-sender@example.com` | ✅ Yes |
-| `SLACK_WEBHOOK_URL` | Slack Incoming Webhook URL from your workspace | `https://hooks.slack.com/services/TXXXXXXXX/BXXXXXXXX/your-webhook-key` | ✅ Yes |
+| `SLACK_WEBHOOK_URL` | Slack Incoming Webhook URL from your workspace | `https://hooks.slack.com/services/TXXXXXXXX/BXXXXXXXX/your-webhook-key` | ✅ Yes (Option A) |
 | `SLACK_CHANNEL` | Slack channel where notifications will be sent | `#email-notifications` | ✅ Yes |
 | `DRIVE_FOLDER_ID` | Google Drive folder ID for attachments | `1ABC123XYZ789def456` | ⚪ Auto-created or Manual |
+| `SLACK_BOT_TOKEN` | Slack Bot User OAuth Token for Web API | `xoxb-YOUR-BOT-TOKEN-HERE` | ⚪ For Option B |
+| `USE_SLACK_API` | Set to 'true' to use Web API instead of webhook | `true` | ⚪ For Option B |
 
 #### 3.4 How to Set Script Properties
 
@@ -125,24 +191,28 @@ Execute this function in Google Apps Script editor:
 // Replace with your actual values before executing!
 function setRequiredConfiguration() {
   // 1. Monitor emails from this address
-  setProperty('SENDER_EMAIL', 'your-sender@example.com');
+  setProperty('SENDER_EMAIL', 'newsletter@company.com');
   
-  // 2. Send notifications to this Slack webhook
-  setProperty('SLACK_WEBHOOK_URL', 'https://hooks.slack.com/services/TXXXXXXXX/BXXXXXXXX/your-actual-webhook-key');
+  // 2. Send notifications to this Slack webhook (Option A)
+  setProperty('SLACK_WEBHOOK_URL', 'https://hooks.slack.com/services/TXXXXXXXX/BXXXXXXXX/your-webhook-key');
   
   // 3. Post notifications in this channel
-  setProperty('SLACK_CHANNEL', '#your-channel');
+  setProperty('SLACK_CHANNEL', '#email-notifications');
   
   // 4. Optional: Set custom Drive folder (if you chose Manual Setup in step 3.2)
   // setProperty('DRIVE_FOLDER_ID', '1ABC123XYZ789def456');
+  
+  // 5. Optional: Enable Slack Web API for thread support (Option B)
+  // setProperty('SLACK_BOT_TOKEN', 'xoxb-YOUR-BOT-TOKEN-HERE');
+  // setProperty('USE_SLACK_API', 'true');
 }
 ```
 
 **Method 2: Manual Setup (Direct Property Setting)**
 Go to Google Apps Script → Project Settings → Script Properties and manually add:
-- Key: `SENDER_EMAIL`, Value: `your-sender@example.com`
+- Key: `SENDER_EMAIL`, Value: `newsletter@company.com`
 - Key: `SLACK_WEBHOOK_URL`, Value: `https://hooks.slack.com/services/TXXXXXXXX/BXXXXXXXX/your-webhook-key`
-- Key: `SLACK_CHANNEL`, Value: `#your-channel`
+- Key: `SLACK_CHANNEL`, Value: `#email-notifications`
 - Key: `DRIVE_FOLDER_ID`, Value: `1ABC123XYZ789def456` (only if using Manual Drive setup from step 3.2)
 
 **Both methods achieve the same result** - choose whichever you find easier!
@@ -156,14 +226,19 @@ showConfiguration();
 Expected output:
 ```
 === Current Configuration ===
-Sender Email: your-sender@example.com
-Slack Channel: your-channel
+Sender Email: newsletter@company.com
+Slack Channel: #email-notifications
 Webhook URL: [SET]
 Drive Folder ID: 1ABC123XYZ789def456
+Tracking Spreadsheet ID: [SET]
 
 Pattern Settings:
 Multiple patterns enabled: true
 Total patterns: 4
+
+Tracking Statistics:
+Tracked messages: 0
+Spreadsheet URL: https://docs.google.com/spreadsheets/d/...
 ```
 
 **Note**: 
@@ -171,7 +246,9 @@ Total patterns: 4
 - Slack Channel: Shows your actual channel name (with or without # prefix)
 - Webhook URL: Always shows "[SET]" to protect the secret URL
 - Drive Folder ID: Shows the actual folder ID when auto-created
+- Tracking Spreadsheet ID: Shows "[SET]" when spreadsheet is created
 - Pattern Settings: Displays the current subject pattern configuration
+- Tracking Statistics: Shows message count and spreadsheet URL for monitoring
 
 #### 3.5 Environment File Reference (Optional - For Local Documentation Only)
 
@@ -181,6 +258,7 @@ The `.env.example` file is provided **only for documentation and local reference
 1. **Local documentation**: Keep track of your configuration values locally
 2. **Team sharing**: Share configuration structure (without actual secrets) with team members
 3. **Backup reference**: Remember what values you've configured
+4. **Development reference**: Understand the structure when setting up in different environments
 
 **Usage (Optional):**
 ```bash
@@ -265,13 +343,29 @@ testDriveOperations(); // From: src/driveManager.js
 
 ## Advanced Configuration
 
-### 🆕 New Features Configuration
+### 🆕 Slack Thread Support (Web API)
+
+When using Slack Web API (Option B), messages are organized as threads:
+- **Main message**: Email summary with attachments info
+- **Thread replies**: 
+  - Full email body (split into multiple messages if needed)
+  - Drive folder notifications for saved attachments
+  
+This provides a cleaner, more organized view of long emails in Slack.
+
+**Benefits of Thread Support**:
+- 📱 Better mobile experience
+- 🗂️ Organized conversation view
+- 🔍 Easier to find specific emails
+- 💬 Can add comments in thread
+
+### 🆕 Current Features Configuration
 
 #### Email Content Display
 ```javascript
 // In src/main.js CONFIG object:
-SHOW_FULL_EMAIL_BODY: true,              // Show full email content (up to 7500 chars)
-BODY_PREVIEW_LENGTH: 7500,               // Maximum email content length
+SHOW_FULL_EMAIL_BODY: true,              // Show full email content (up to 20000 chars)
+BODY_PREVIEW_LENGTH: 20000,              // Maximum email content length (increased from 7500)
 SEND_DRIVE_FOLDER_NOTIFICATION: true,    // Send follow-up Drive folder links
 ```
 
@@ -363,9 +457,9 @@ function updateSlackChannel() {
 ```javascript
 // Update all settings including channel
 function updateConfiguration() {
-  setProperty('SENDER_EMAIL', 'your-sender@example.com');
-  setProperty('SLACK_WEBHOOK_URL', 'your-webhook-url');
-  setProperty('SLACK_CHANNEL', '#your-new-channel');  // ← Update this
+  setProperty('SENDER_EMAIL', 'newsletter@company.com');
+  setProperty('SLACK_WEBHOOK_URL', 'https://hooks.slack.com/services/TXXXXXXXX/BXXXXXXXX/your-webhook-key');
+  setProperty('SLACK_CHANNEL', '#email-notifications');  // ← Update this
   
   console.log('Configuration updated successfully');
 }
@@ -418,12 +512,13 @@ testSlackNotifications();  // From: src/testRunner.js
 2. **Follow-up Drive Notification**: Dedicated message with clickable folder links (when PDFs are saved)
 
 #### Notification Content Features
-- 📝 **Full email content**: Up to 7,500 characters (configurable)
+- 📝 **Full email content**: Up to 20,000 characters (configurable, increased for better coverage)
 - 📎 **Smart attachment handling**: 
   - ✅ **PDF files**: Saved to organized Drive folders
   - ⚠️ **Other files**: Listed but marked as "skipped"
 - 🔗 **Direct links**: Clickable file and folder URLs
 - 📁 **Folder organization**: Date + subject naming
+- 🧵 **Thread support**: Optional Slack Web API integration for organized conversations
 
 #### Attachment Display Format
 ```

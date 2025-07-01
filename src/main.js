@@ -27,10 +27,10 @@ const CONFIG = {
       
       // Event notification patterns with date/time
       /【.*】第\d+回.*部会/,
-      /第\d+回.*部会/,
+      /.*第\d+回.*部会/,
       
       // Study session patterns
-      /勉強会.*『.*』.*※.*開/,
+      /.*勉強会/,
       
     ]
   },
@@ -49,7 +49,7 @@ const CONFIG = {
   
   // Processing settings
   MAX_EMAILS_PER_RUN: 10,  // 一回の実行で処理する最大メール数
-  BODY_PREVIEW_LENGTH: 7500,  // Slackに表示する本文の最大文字数（Slack制限: 8000文字）
+  BODY_PREVIEW_LENGTH: 20000,  // Slackに表示する本文の最大文字数（増やして全文表示可能に）
   SHOW_FULL_EMAIL_BODY: true,  // true: 全文表示（制限内）, false: 短縮表示
   SEND_DRIVE_FOLDER_NOTIFICATION: true,  // true: PDF保存後にDriveフォルダリンクをフォローアップ送信
   
@@ -66,7 +66,11 @@ const PROPERTY_KEYS = {
   SLACK_CHANNEL: 'SLACK_CHANNEL',
   
   // Optional properties (auto-generated if not set)
-  DRIVE_FOLDER_ID: 'DRIVE_FOLDER_ID'
+  DRIVE_FOLDER_ID: 'DRIVE_FOLDER_ID',
+  
+  // Slack Web API properties (optional - for thread support)
+  SLACK_BOT_TOKEN: 'SLACK_BOT_TOKEN',
+  USE_SLACK_API: 'USE_SLACK_API'  // Set to 'true' to use Web API instead of webhook
 };
 
 /**
@@ -275,7 +279,10 @@ function markMessageAsProcessed(message) {
   try {
     // Now using spreadsheet for tracking
     console.log('Warning: markMessageAsProcessed is deprecated. Use markMessageProcessedInSheet instead.');
-    markMessageProcessedInSheet(message);
+    // markMessageProcessedInSheet is defined in spreadsheetManager.js
+    if (typeof markMessageProcessedInSheet === 'function') {
+      markMessageProcessedInSheet(message);
+    }
     
   } catch (error) {
     console.error('Error marking message as processed:', error);
@@ -287,10 +294,10 @@ function markMessageAsProcessed(message) {
  * Cleanup old processed message records (optional maintenance)
  * 古い処理済みメッセージレコードのクリーンアップ（オプションのメンテナンス）
  * 
- * @param {number} daysOld - Remove records older than this many days
+ * @param {number} _daysOld - Remove records older than this many days (unused)
  * @deprecated Cleanup is now handled automatically by spreadsheetManager.js
  */
-function cleanupOldProcessedMessages(daysOld = 30) {
+function cleanupOldProcessedMessages(_daysOld = 30) {
   try {
     console.log('Note: Cleanup is now handled automatically by the spreadsheet manager.');
     // The spreadsheet manager handles cleanup automatically when row limit is exceeded
@@ -331,9 +338,9 @@ function setupConfiguration() {
   try {
     // Example setup - replace with actual values
     const config = {
-      'SENDER_EMAIL': 'your-actual-sender@example.com',
-      'SLACK_WEBHOOK_URL': 'https://hooks.slack.com/services/YOUR/ACTUAL/WEBHOOK',
-      'SLACK_CHANNEL': '#your-actual-channel'
+      'SENDER_EMAIL': 'newsletter@company.com',
+      'SLACK_WEBHOOK_URL': 'https://hooks.slack.com/services/TXXXXXXXX/BXXXXXXXX/your-webhook-key',
+      'SLACK_CHANNEL': '#email-notifications'
     };
     
     Object.entries(config).forEach(([key, value]) => {
